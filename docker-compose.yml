@@ -1,0 +1,20 @@
+version: "3.9"
+
+# Sobe apenas o PostgreSQL. Backend e frontend rodam localmente via
+# "npm run dev" (mais prático para hot-reload durante o desenvolvimento).
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: controle-financeiro-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: controle_financeiro
+    ports:
+      - "5432:5432"
+    volumes:
+      - controle_financeiro_data:/var/lib/postgresql/data
+
+volumes:
+  controle_financeiro_data:

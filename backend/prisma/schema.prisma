@@ -1,0 +1,245 @@
+// Schema do banco de dados - App de Controle Financeiro
+// Rode "npx prisma migrate dev" para criar as tabelas no PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Scope {
+  PERSONAL
+  FAMILY
+}
+
+enum MovementType {
+  EXPENSE
+  INCOME
+  TRANSFER
+}
+
+enum CategoryType {
+  EXPENSE
+  INCOME
+  INVESTMENT
+}
+
+enum PaymentMethod {
+  CASH
+  DEBIT
+  CREDIT
+  PIX
+  TRANSFER
+  OTHER
+}
+
+enum InvoiceStatus {
+  OPEN
+  CLOSED
+  PARTIAL
+  PAID
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  wallets           Wallet[]
+  categories        Category[]
+  movements         Movement[]
+  cards             Card[]
+  investments       Investment[]
+  investmentGoals   InvestmentGoal[]
+  fixedBills        FixedBill[]
+  memberships       FamilyMembership[]
+}
+
+model FamilyGroup {
+  id         String   @id @default(uuid())
+  name       String
+  inviteCode String   @unique @default(uuid())
+  createdAt  DateTime @default(now())
+
+  members     FamilyMembership[]
+  wallets     Wallet[]
+  categories  Category[]
+  movements   Movement[]
+  cards       Card[]
+  investments Investment[]
+  fixedBills  FixedBill[]
+}
+
+model FamilyMembership {
+  id            String      @id @default(uuid())
+  userId        String
+  familyGroupId String
+  joinedAt      DateTime    @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyGroup FamilyGroup @relation(fields: [familyGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, familyGroupId])
+}
+
+model Wallet {
+  id            String   @id @default(uuid())
+  name          String
+  type          String   @default("checking") // checking, savings, cash, other
+  balance       Decimal  @default(0) @db.Decimal(14, 2)
+  scope         Scope    @default(PERSONAL)
+  userId        String
+  familyGroupId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyGroup FamilyGroup? @relation(fields: [familyGroupId], references: [id], onDelete: Cascade)
+  movements   Movement[]
+}
+
+model Category {
+  id            String       @id @default(uuid())
+  name          String
+  type          CategoryType
+  icon          String?
+  color         String?
+  isDefault     Boolean      @default(false)
+  scope         Scope        @default(PERSONAL)
+  userId        String?
+  familyGroupId String?
+  createdAt     DateTime     @default(now())
+
+  user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyGroup FamilyGroup? @relation(fields: [familyGroupId], references: [id], onDelete: Cascade)
+  movements   Movement[]
+  budgets     Budget[]
+}
+
+model Budget {
+  id         String   @id @default(uuid())
+  categoryId String
+  month      Int
+  year       Int
+  limit      Decimal  @db.Decimal(14, 2)
+  createdAt  DateTime @default(now())
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, month, year])
+}
+
+model Card {
+  id            String   @id @default(uuid())
+  name          String
+  brand         String?
+  closingDay    Int
+  dueDay        Int
+  limit         Decimal  @db.Decimal(14, 2)
+  scope         Scope    @default(PERSONAL)
+  userId        String
+  familyGroupId String?
+  createdAt     DateTime @default(now())
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyGroup FamilyGroup? @relation(fields: [familyGroupId], references: [id], onDelete: Cascade)
+  movements   Movement[]
+  invoices    Invoice[]
+}
+
+model Invoice {
+  id           String        @id @default(uuid())
+  cardId       String
+  referenceMonth Int
+  referenceYear  Int
+  total        Decimal       @default(0) @db.Decimal(14, 2)
+  status       InvoiceStatus @default(OPEN)
+  closingDate  DateTime?
+  dueDate      DateTime?
+
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, referenceMonth, referenceYear])
+}
+
+model Movement {
+  id            String        @id @default(uuid())
+  description   String
+  amount        Decimal       @db.Decimal(14, 2)
+  type          MovementType
+  date          DateTime      @default(now())
+  paymentMethod PaymentMethod @default(OTHER)
+  isRecurring   Boolean       @default(false)
+  installments  Int           @default(1)
+  installmentOf String?       // agrupa parcelas da mesma compra
+  scope         Scope         @default(PERSONAL)
+
+  walletId      String?
+  categoryId    String?
+  cardId        String?
+  userId        String
+  familyGroupId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  wallet      Wallet?      @relation(fields: [walletId], references: [id], onDelete: SetNull)
+  category    Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  card        Card?        @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyGroup FamilyGroup? @relation(fields: [familyGroupId], references: [id], onDelete: Cascade)
+}
+
+model InvestmentGoal {
+  id            String   @id @default(uuid())
+  name          String
+  targetAmount  Decimal  @db.Decimal(14, 2)
+  currentAmount Decimal  @default(0) @db.Decimal(14, 2)
+  userId        String
+  createdAt     DateTime @default(now())
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  investments Investment[]
+}
+
+model Investment {
+  id            String   @id @default(uuid())
+  name          String
+  category      String   // fixed_income, stocks, emergency_reserve, custom
+  amount        Decimal  @db.Decimal(14, 2)
+  yieldRate     Decimal? @db.Decimal(8, 4)
+  broker        String?
+  ticker        String?
+  scope         Scope    @default(PERSONAL)
+  userId        String
+  familyGroupId String?
+  goalId        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyGroup FamilyGroup?    @relation(fields: [familyGroupId], references: [id], onDelete: Cascade)
+  goal        InvestmentGoal? @relation(fields: [goalId], references: [id], onDelete: SetNull)
+}
+
+model FixedBill {
+  id            String   @id @default(uuid())
+  name          String
+  amount        Decimal  @db.Decimal(14, 2)
+  dueDay        Int
+  category      String?
+  scope         Scope    @default(PERSONAL)
+  userId        String
+  familyGroupId String?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyGroup FamilyGroup? @relation(fields: [familyGroupId], references: [id], onDelete: Cascade)
+}
