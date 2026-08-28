@@ -33,8 +33,8 @@ export function Layout() {
     <div className="app-shell">
       <aside className={`sidebar ${navOpen ? "sidebar-open" : ""}`}>
         <div className="sidebar-brand">
-          <span className="sidebar-brand-mark">₡</span>
-          <span className="sidebar-brand-name">Razão</span>
+          <span className="sidebar-brand-mark">$</span>
+          <span className="sidebar-brand-name">Controle Financeiro</span>
         </div>
         <nav className="sidebar-nav">
           {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (

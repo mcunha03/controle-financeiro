@@ -32,8 +32,8 @@ export function Register() {
     <div className="auth-screen">
       <div className="auth-card">
         <div className="auth-brand">
-          <span className="sidebar-brand-mark">₡</span>
-          <h1>Razão</h1>
+          <span className="sidebar-brand-mark">$</span>
+          <h1>Controle Financeiro</h1>
         </div>
         <p className="auth-subtitle">Crie sua conta para começar a organizar suas finanças.</p>
 
