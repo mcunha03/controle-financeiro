@@ -48,5 +48,9 @@ export const INVESTMENT_CATEGORY_LABELS: Record<string, string> = {
   fixed_income: "Renda fixa",
   stocks: "Ações",
   emergency_reserve: "Reserva de emergência",
+  FII: "Fundos imobiliários",
+  ETF: "ETFs",
+  crypto: "Criptomoedas",
   custom: "Personalizado",
+
 };
