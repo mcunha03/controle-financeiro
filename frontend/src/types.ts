@@ -144,3 +144,16 @@ export interface Budget {
   limit: string | number;
   category?: Category;
 }
+
+export interface InstallmentGroup {
+  installmentOf: string;
+  description: string;
+  totalAmount: number;
+  installments: number;
+  firstDate: string;
+  lastDate: string;
+  type: MovementType;
+  category?: Category | null;
+  card?: Card | null;
+  wallet?: Wallet | null;
+}

@@ -5,7 +5,7 @@ import { movementService, type MovementFilters } from "../services/movementServi
 import { walletService } from "../services/walletService";
 import { categoryService } from "../services/categoryService";
 import { cardService } from "../services/cardService";
-import type { Movement, Wallet, Category, Card } from "../types";
+import type { Movement, Wallet, Category, Card, InstallmentGroup } from "../types";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -20,6 +20,7 @@ import { getErrorMessage } from "../services/api";
 export function Movements() {
   const { scope, familyGroupId } = useScope();
   const [movements, setMovements] = useState<Movement[]>([]);
+  const [installmentGroups, setInstallmentGroups] = useState<InstallmentGroup[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
@@ -27,6 +28,7 @@ export function Movements() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Movement | null>(null);
   const [deleting, setDeleting] = useState<Movement | null>(null);
+  const [deletingGroup, setDeletingGroup] = useState<InstallmentGroup | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [filterType, setFilterType] = useState<MovementFilters["type"] | "">("");
@@ -37,12 +39,14 @@ export function Movements() {
     const filters: MovementFilters = filterType ? { type: filterType } : {};
     Promise.all([
       movementService.list(scopeParams, filters),
+      movementService.listInstallmentGroups(scopeParams),
       walletService.list(scopeParams),
       categoryService.list(scopeParams),
       cardService.list(scopeParams),
     ])
-      .then(([m, w, c, cd]) => {
+      .then(([m, groups, w, c, cd]) => {
         setMovements(m);
+        setInstallmentGroups(groups);
         setWallets(w);
         setCategories(c);
         setCards(cd);
@@ -88,6 +92,13 @@ export function Movements() {
     load();
   }
 
+  async function handleDeleteGroup() {
+    if (!deletingGroup) return;
+    await movementService.removeInstallmentGroup(deletingGroup.installmentOf);
+    setDeletingGroup(null);
+    load();
+  }
+
   return (
     <div className="page">
       <div className="page-header">
@@ -107,51 +118,98 @@ export function Movements() {
 
       {loading ? (
         <Loading />
-      ) : movements.length === 0 ? (
-        <EmptyState
-          title="Nenhuma movimentação encontrada"
-          description="Lance sua primeira receita ou despesa."
-          action={<Button onClick={() => setModalOpen(true)}>Lançar movimentação</Button>}
-        />
       ) : (
-        <ul className="movement-list">
-          {movements.map((m) => (
-            <li key={m.id} className="movement-row">
-              <div className="movement-row-main">
-                <span
-                  className="category-dot"
-                  style={{ background: m.category?.color || "var(--muted-2)" }}
-                  aria-hidden="true"
-                />
-                <div>
-                  <span className="movement-row-desc">
-                    {m.description}
-                    {m.installments > 1 && (
-                      <span className="badge">
-                        <Repeat size={12} /> parcelado
+        <>
+          {installmentGroups.length > 0 && (
+            <section className="panel">
+              <h2>Compras parceladas</h2>
+              <ul className="movement-list">
+                {installmentGroups.map((g) => (
+                  <li key={g.installmentOf} className="movement-row">
+                    <div className="movement-row-main">
+                      <span
+                        className="category-dot"
+                        style={{ background: g.category?.color || "var(--muted-2)" }}
+                        aria-hidden="true"
+                      />
+                      <div>
+                        <span className="movement-row-desc">
+                          {g.description}
+                          <span className="badge">
+                            <Repeat size={12} /> {g.installments}x
+                          </span>
+                        </span>
+                        <span className="movement-row-meta">
+                          {g.card?.name ? `Cartão: ${g.card.name} · ` : ""}
+                          {formatDate(g.firstDate)} até {formatDate(g.lastDate)}
+                        </span>
+                      </div>
+                    </div>
+                    <span className={g.type === "EXPENSE" ? "amount-negative" : "amount-positive"}>
+                      {g.type === "EXPENSE" ? "-" : "+"}
+                      {formatCurrency(g.totalAmount)}
+                    </span>
+                    <button
+                      type="button"
+                      className="icon-btn-muted"
+                      onClick={() => setDeletingGroup(g)}
+                      aria-label="Excluir compra parcelada inteira"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {movements.length === 0 ? (
+            <EmptyState
+              title="Nenhuma movimentação encontrada"
+              description="Lance sua primeira receita ou despesa."
+              action={<Button onClick={() => setModalOpen(true)}>Lançar movimentação</Button>}
+            />
+          ) : (
+            <ul className="movement-list">
+              {movements.map((m) => (
+                <li key={m.id} className="movement-row">
+                  <div className="movement-row-main">
+                    <span
+                      className="category-dot"
+                      style={{ background: m.category?.color || "var(--muted-2)" }}
+                      aria-hidden="true"
+                    />
+                    <div>
+                      <span className="movement-row-desc">
+                        {m.description}
+                        {m.installments > 1 && (
+                          <span className="badge">
+                            <Repeat size={12} /> parcelado
+                          </span>
+                        )}
+                        {m.isRecurring && <span className="badge">recorrente</span>}
                       </span>
-                    )}
-                    {m.isRecurring && <span className="badge">recorrente</span>}
+                      <span className="movement-row-meta">
+                        {formatDate(m.date)} · {m.category?.name || "Sem categoria"} · {PAYMENT_METHOD_LABELS[m.paymentMethod]}
+                        {m.user?.name && scope === "FAMILY" ? ` · ${m.user.name}` : ""}
+                      </span>
+                    </div>
+                  </div>
+                  <span className={m.type === "EXPENSE" ? "amount-negative" : "amount-positive"}>
+                    {m.type === "EXPENSE" ? "-" : "+"}
+                    {formatCurrency(m.amount)}
                   </span>
-                  <span className="movement-row-meta">
-                    {formatDate(m.date)} · {m.category?.name || "Sem categoria"} · {PAYMENT_METHOD_LABELS[m.paymentMethod]}
-                    {m.user?.name && scope === "FAMILY" ? ` · ${m.user.name}` : ""}
-                  </span>
-                </div>
-              </div>
-              <span className={m.type === "EXPENSE" ? "amount-negative" : "amount-positive"}>
-                {m.type === "EXPENSE" ? "-" : "+"}
-                {formatCurrency(m.amount)}
-              </span>
-              <button type="button" className="icon-btn-muted" onClick={() => setEditing(m)} aria-label="Editar movimentação">
-                <Pencil size={15} />
-              </button>
-              <button type="button" className="icon-btn-muted" onClick={() => setDeleting(m)} aria-label="Excluir movimentação">
-                <Trash2 size={15} />
-              </button>
-            </li>
-          ))}
-        </ul>
+                  <button type="button" className="icon-btn-muted" onClick={() => setEditing(m)} aria-label="Editar movimentação">
+                    <Pencil size={15} />
+                  </button>
+                  <button type="button" className="icon-btn-muted" onClick={() => setDeleting(m)} aria-label="Excluir movimentação">
+                    <Trash2 size={15} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
 
       <Modal open={modalOpen} title="Lançar movimentação" onClose={() => setModalOpen(false)}>
@@ -193,6 +251,16 @@ export function Movements() {
         danger
         onConfirm={handleDelete}
         onCancel={() => setDeleting(null)}
+      />
+
+      <ConfirmDialog
+        open={!!deletingGroup}
+        title="Excluir compra parcelada"
+        message={`Tem certeza que deseja excluir "${deletingGroup?.description}" e todas as ${deletingGroup?.installments} parcelas dela? Essa ação não pode ser desfeita.`}
+        confirmLabel="Excluir tudo"
+        danger
+        onConfirm={handleDeleteGroup}
+        onCancel={() => setDeletingGroup(null)}
       />
     </div>
   );

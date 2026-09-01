@@ -1,6 +1,7 @@
 import api from "./api";
-import type { Movement, MovementType, PaymentMethod } from "../types";
+import type { InstallmentGroup, Movement, MovementType, PaymentMethod } from "../types";
 import { scopeQuery, type ScopeParams } from "./scopeParams";
+
 
 export interface MovementFilters {
   from?: string;
@@ -57,4 +58,15 @@ export const movementService = {
   async remove(id: string) {
     await api.delete(`/movements/${id}`);
   },
+
+
+  async listInstallmentGroups(scope: ScopeParams) {
+    const { data } = await api.get<InstallmentGroup[]>("/movements/installment-groups", { params: scopeQuery(scope) });
+    return data;
+  },
+
+  async removeInstallmentGroup(installmentOf: string) {
+    await api.delete(`/movements/installment-groups/${installmentOf}`);
+  },
+
 };

@@ -238,4 +238,71 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
+// GET /movements/installment-groups
+// Lista as compras parceladas agrupadas (uma linha por compra, não uma por parcela)
+router.get("/installment-groups", async (req, res) => {
+  try {
+    const where = await buildScopeWhere(req);
+    const movements = await prisma.movement.findMany({
+      where: { ...where, installments: { gt: 1 } },
+      include: { category: true, card: true, wallet: true },
+      orderBy: { date: "asc" },
+    });
+
+    const groups = {};
+    for (const m of movements) {
+      const key = m.installmentOf;
+      if (!key) continue;
+      if (!groups[key]) {
+        groups[key] = {
+          installmentOf: key,
+          description: m.description.replace(/\s\(\d+\/\d+\)$/, ""),
+          totalAmount: 0,
+          installments: m.installments,
+          firstDate: m.date,
+          lastDate: m.date,
+          type: m.type,
+          category: m.category,
+          card: m.card,
+          wallet: m.wallet,
+        };
+      }
+      groups[key].totalAmount += Number(m.amount);
+      if (new Date(m.date) < new Date(groups[key].firstDate)) groups[key].firstDate = m.date;
+      if (new Date(m.date) > new Date(groups[key].lastDate)) groups[key].lastDate = m.date;
+    }
+
+    return res.json(Object.values(groups));
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message || "Erro ao listar compras parceladas." });
+  }
+});
+
+// DELETE /movements/installment-groups/:installmentOf
+// Exclui todas as parcelas de uma compra parcelada de uma vez só
+router.delete("/installment-groups/:installmentOf", async (req, res) => {
+  try {
+    const movements = await prisma.movement.findMany({ where: { installmentOf: req.params.installmentOf } });
+    if (movements.length === 0) {
+      return res.status(404).json({ error: "Compra parcelada não encontrada." });
+    }
+    for (const m of movements) {
+      await assertAccess(req, m);
+    }
+
+    for (const m of movements) {
+      if (m.walletId && !m.cardId) {
+        const delta = m.type === "INCOME" ? -Number(m.amount) : Number(m.amount);
+        await prisma.wallet.update({ where: { id: m.walletId }, data: { balance: { increment: delta } } });
+      }
+    }
+
+    await prisma.movement.deleteMany({ where: { installmentOf: req.params.installmentOf } });
+    return res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    return res.status(err.status || 500).json({ error: err.message || "Erro ao excluir compra parcelada." });
+  }
+});
+
 module.exports = router;
