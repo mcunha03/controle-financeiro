@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Repeat } from "lucide-react";
+import { Plus, Pencil, Trash2, Repeat } from "lucide-react";
 import { useScope } from "../contexts/ScopeContext";
 import { movementService, type MovementFilters } from "../services/movementService";
 import { walletService } from "../services/walletService";
@@ -13,6 +13,7 @@ import { EmptyState } from "../components/EmptyState";
 import { Loading } from "../components/Loading";
 import { Select } from "../components/Select";
 import { MovementForm, type MovementFormValues } from "../components/MovementForm";
+import { MovementEditForm, type MovementEditValues } from "../components/MovementEditForm";
 import { formatCurrency, formatDate, PAYMENT_METHOD_LABELS } from "../utils/format";
 import { getErrorMessage } from "../services/api";
 
@@ -24,6 +25,7 @@ export function Movements() {
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<Movement | null>(null);
   const [deleting, setDeleting] = useState<Movement | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -59,6 +61,21 @@ export function Movements() {
       load();
     } catch (err) {
       setError(getErrorMessage(err, "Não foi possível lançar a movimentação."));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleEditSubmit(values: MovementEditValues) {
+    if (!editing) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await movementService.update(editing.id, values);
+      setEditing(null);
+      load();
+    } catch (err) {
+      setError(getErrorMessage(err, "Não foi possível salvar as alterações."));
     } finally {
       setSubmitting(false);
     }
@@ -126,6 +143,9 @@ export function Movements() {
                 {m.type === "EXPENSE" ? "-" : "+"}
                 {formatCurrency(m.amount)}
               </span>
+              <button type="button" className="icon-btn-muted" onClick={() => setEditing(m)} aria-label="Editar movimentação">
+                <Pencil size={15} />
+              </button>
               <button type="button" className="icon-btn-muted" onClick={() => setDeleting(m)} aria-label="Excluir movimentação">
                 <Trash2 size={15} />
               </button>
@@ -146,6 +166,19 @@ export function Movements() {
             submitting={submitting}
             onSubmit={handleSubmit}
             onCancel={() => setModalOpen(false)}
+          />
+        )}
+      </Modal>
+
+      <Modal open={!!editing} title="Editar movimentação" onClose={() => setEditing(null)}>
+        {error && <p className="field-error">{error}</p>}
+        {editing && (
+          <MovementEditForm
+            movement={editing}
+            categories={categories}
+            submitting={submitting}
+            onSubmit={handleEditSubmit}
+            onCancel={() => setEditing(null)}
           />
         )}
       </Modal>
