@@ -125,23 +125,80 @@ router.post("/", async (req, res) => {
   }
 });
 
+
 // PUT /movements/:id
 router.put("/:id", async (req, res) => {
   try {
     const existing = await prisma.movement.findUnique({ where: { id: req.params.id } });
     await assertAccess(req, existing);
 
-    const { description, amount, date, categoryId, paymentMethod } = req.body;
+    const { description, amount, date, categoryId, paymentMethod, destination, walletId, cardId } = req.body;
 
     if (categoryId) {
       const category = await prisma.category.findUnique({ where: { id: categoryId } });
       await assertAccess(req, category);
     }
 
-    // Se o valor mudar e estiver ligado a uma carteira (sem ser cartão), ajusta o saldo
-    if (amount !== undefined && existing.walletId && !existing.cardId) {
+    // Movimentações parceladas não podem trocar de carteira/cartão por aqui -
+    // exigiria refazer todas as parcelas. Exclua e lance de novo nesse caso.
+    if (existing.installments > 1 && destination !== undefined) {
+      return res.status(400).json({
+        error: "Não é possível trocar carteira/cartão de uma movimentação parcelada. Exclua e lance novamente.",
+      });
+    }
+
+    const newAmount = amount !== undefined ? Number(amount) : Number(existing.amount);
+    const updateData = {
+      description,
+      amount,
+      date: date ? new Date(date) : undefined,
+      categoryId,
+      paymentMethod,
+    };
+
+    if (destination) {
+      // Troca de destino (carteira <-> cartão, ou carteira A -> carteira B)
+      let newWalletId = null;
+      let newCardId = null;
+
+      if (destination === "WALLET") {
+        if (!walletId) return res.status(400).json({ error: "Carteira é obrigatória." });
+        const wallet = await prisma.wallet.findUnique({ where: { id: walletId } });
+        await assertAccess(req, wallet);
+        newWalletId = walletId;
+      } else if (destination === "CARD") {
+        if (!cardId) return res.status(400).json({ error: "Cartão é obrigatório." });
+        const card = await prisma.card.findUnique({ where: { id: cardId } });
+        await assertAccess(req, card);
+        newCardId = cardId;
+      } else {
+        return res.status(400).json({ error: "Destino inválido." });
+      }
+
+      // Desfaz o efeito no saldo da carteira antiga (se havia uma, sem ser cartão)
+      if (existing.walletId && !existing.cardId) {
+        const reverseDelta = existing.type === "INCOME" ? -Number(existing.amount) : Number(existing.amount);
+        await prisma.wallet.update({
+          where: { id: existing.walletId },
+          data: { balance: { increment: reverseDelta } },
+        });
+      }
+
+      // Aplica o efeito na carteira nova (se o novo destino for uma carteira)
+      if (newWalletId) {
+        const applyDelta = existing.type === "INCOME" ? newAmount : -newAmount;
+        await prisma.wallet.update({
+          where: { id: newWalletId },
+          data: { balance: { increment: applyDelta } },
+        });
+      }
+
+      updateData.walletId = newWalletId;
+      updateData.cardId = newCardId;
+    } else if (amount !== undefined && existing.walletId && !existing.cardId) {
+      // Só o valor mudou, carteira continua a mesma (lógica original)
       const oldDelta = existing.type === "INCOME" ? Number(existing.amount) : -Number(existing.amount);
-      const newDelta = existing.type === "INCOME" ? Number(amount) : -Number(amount);
+      const newDelta = existing.type === "INCOME" ? newAmount : -newAmount;
       await prisma.wallet.update({
         where: { id: existing.walletId },
         data: { balance: { increment: newDelta - oldDelta } },
@@ -150,13 +207,7 @@ router.put("/:id", async (req, res) => {
 
     const movement = await prisma.movement.update({
       where: { id: req.params.id },
-      data: {
-        description,
-        amount,
-        date: date ? new Date(date) : undefined,
-        categoryId,
-        paymentMethod,
-      },
+      data: updateData,
     });
     return res.json(movement);
   } catch (err) {

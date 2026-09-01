@@ -176,6 +176,8 @@ export function Movements() {
           <MovementEditForm
             movement={editing}
             categories={categories}
+            wallets={wallets}
+            cards={cards}
             submitting={submitting}
             onSubmit={handleEditSubmit}
             onCancel={() => setEditing(null)}

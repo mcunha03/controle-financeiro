@@ -42,7 +42,14 @@ export const movementService = {
     return data;
   },
 
-  async update(id: string, payload: Partial<Pick<Movement, "description" | "amount" | "date" | "categoryId" | "paymentMethod">>) {
+  async update(
+    id: string,
+    payload: Partial<Pick<Movement, "description" | "amount" | "date" | "categoryId" | "paymentMethod">> & {
+      destination?: "WALLET" | "CARD";
+      walletId?: string;
+      cardId?: string;
+    }
+  ) {
     const { data } = await api.put<Movement>(`/movements/${id}`, payload);
     return data;
   },
