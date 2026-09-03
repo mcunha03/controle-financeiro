@@ -14,6 +14,7 @@ import { Loading } from "../components/Loading";
 import { Select } from "../components/Select";
 import { MovementForm, type MovementFormValues } from "../components/MovementForm";
 import { MovementEditForm, type MovementEditValues } from "../components/MovementEditForm";
+import { InstallmentGroupEditForm, type InstallmentGroupEditValues } from "../components/InstallmentGroupEditForm";
 import { formatCurrency, formatDate, PAYMENT_METHOD_LABELS } from "../utils/format";
 import { getErrorMessage } from "../services/api";
 
@@ -29,6 +30,7 @@ export function Movements() {
   const [editing, setEditing] = useState<Movement | null>(null);
   const [deleting, setDeleting] = useState<Movement | null>(null);
   const [deletingGroup, setDeletingGroup] = useState<InstallmentGroup | null>(null);
+  const [editingGroup, setEditingGroup] = useState<InstallmentGroup | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [filterType, setFilterType] = useState<MovementFilters["type"] | "">("");
@@ -99,6 +101,21 @@ export function Movements() {
     load();
   }
 
+    async function handleEditGroupSubmit(values: InstallmentGroupEditValues) {
+    if (!editingGroup) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await movementService.updateInstallmentGroup(editingGroup.installmentOf, values);
+      setEditingGroup(null);
+      load();
+    } catch (err) {
+      setError(getErrorMessage(err, "Não foi possível salvar as alterações da compra parcelada."));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div className="page">
       <div className="page-header">
@@ -149,6 +166,16 @@ export function Movements() {
                       {g.type === "EXPENSE" ? "-" : "+"}
                       {formatCurrency(g.totalAmount)}
                     </span>
+
+                    <button
+                      type="button"
+                      className="icon-btn-muted"
+                      onClick={() => setEditingGroup(g)}
+                      aria-label="Editar compra parcelada inteira"
+                      >
+                      <Pencil size={15} />
+                    </button>
+
                     <button
                       type="button"
                       className="icon-btn-muted"
@@ -242,6 +269,19 @@ export function Movements() {
           />
         )}
       </Modal>
+
+      <Modal open={!!editingGroup} title="Editar compra parcelada" onClose={() => setEditingGroup(null)}>
+  {error && <p className="field-error">{error}</p>}
+  {editingGroup && (
+    <InstallmentGroupEditForm
+      group={editingGroup}
+      categories={categories}
+      submitting={submitting}
+      onSubmit={handleEditGroupSubmit}
+      onCancel={() => setEditingGroup(null)}
+    />
+  )}
+</Modal>
 
       <ConfirmDialog
         open={!!deleting}

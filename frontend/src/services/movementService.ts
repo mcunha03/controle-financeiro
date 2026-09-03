@@ -58,7 +58,6 @@ export const movementService = {
   async remove(id: string) {
     await api.delete(`/movements/${id}`);
   },
-<<<<<<< HEAD
 
 
   async listInstallmentGroups(scope: ScopeParams) {
@@ -70,11 +69,9 @@ export const movementService = {
     await api.delete(`/movements/installment-groups/${installmentOf}`);
   },
 
-=======
   
     async updateInstallmentGroup(installmentOf: string, payload: { description?: string; categoryId?: string }) {
     const { data } = await api.put<Movement[]>(`/movements/installment-groups/${installmentOf}`, payload);
     return data;
   },
->>>>>>> testes
 };
