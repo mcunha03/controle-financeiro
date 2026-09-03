@@ -165,6 +165,50 @@ router.put("/:id", async (req, res) => {
   }
 });
 
+// PUT /movements/installment-groups/:installmentOf
+// Atualiza descrição e/ou categoria de TODAS as parcelas de uma compra parcelada de uma vez.
+// Mantém o sufixo "(i/n)" de cada parcela ao trocar a descrição.
+router.put("/installment-groups/:installmentOf", async (req, res) => {
+  try {
+    const movements = await prisma.movement.findMany({ where: { installmentOf: req.params.installmentOf } });
+    if (movements.length === 0) {
+      return res.status(404).json({ error: "Compra parcelada não encontrada." });
+    }
+    for (const m of movements) {
+      await assertAccess(req, m);
+    }
+
+    const { description, categoryId } = req.body;
+
+    if (categoryId) {
+      const category = await prisma.category.findUnique({ where: { id: categoryId } });
+      await assertAccess(req, category);
+    }
+
+    const updated = [];
+    for (const m of movements) {
+      const suffixMatch = m.description.match(/\s\(\d+\/\d+\)$/);
+      const suffix = suffixMatch ? suffixMatch[0] : "";
+
+      const data = {};
+      if (description !== undefined && description.trim() !== "") {
+        data.description = `${description.trim()}${suffix}`;
+      }
+      if (categoryId !== undefined) {
+        data.categoryId = categoryId || null;
+      }
+
+      const movement = await prisma.movement.update({ where: { id: m.id }, data });
+      updated.push(movement);
+    }
+
+    return res.json(updated);
+  } catch (err) {
+    console.error(err);
+    return res.status(err.status || 500).json({ error: err.message || "Erro ao atualizar compra parcelada." });
+  }
+});
+
 // DELETE /movements/:id
 router.delete("/:id", async (req, res) => {
   try {

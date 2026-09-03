@@ -50,4 +50,9 @@ export const movementService = {
   async remove(id: string) {
     await api.delete(`/movements/${id}`);
   },
+  
+    async updateInstallmentGroup(installmentOf: string, payload: { description?: string; categoryId?: string }) {
+    const { data } = await api.put<Movement[]>(`/movements/installment-groups/${installmentOf}`, payload);
+    return data;
+  },
 };
