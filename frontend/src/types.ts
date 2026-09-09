@@ -101,6 +101,8 @@ export interface Investment {
   name: string;
   category: string;
   amount: string | number;
+  quantity?: string | number | null;
+  avgPrice?: string | number | null;
   yieldRate?: string | number | null;
   broker?: string | null;
   ticker?: string | null;
@@ -109,6 +111,31 @@ export interface Investment {
   familyGroupId?: string | null;
   goalId?: string | null;
   goal?: InvestmentGoal | null;
+  transactions?: InvestmentTransaction[];
+  incomes?: InvestmentIncome[];
+  summary?: {
+    totalIncome: number;
+    income12m: number;
+    dividendYieldOnCost: number;
+  };
+}
+
+export interface InvestmentTransaction {
+  id: string;
+  investmentId: string;
+  type: "BUY" | "SELL";
+  quantity: string | number;
+  unitPrice: string | number;
+  fees?: string | number;
+  date: string;
+}
+
+export interface InvestmentIncome {
+  id: string;
+  investmentId: string;
+  type: "DIVIDEND" | "JCP" | "RENDIMENTO";
+  amount: string | number;
+  date: string;
 }
 
 export interface FixedBill {

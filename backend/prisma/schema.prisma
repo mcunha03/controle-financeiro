@@ -211,8 +211,10 @@ model InvestmentGoal {
 model Investment {
   id            String   @id @default(uuid())
   name          String
-  category      String   // fixed_income, stocks, emergency_reserve, custom
+  category      String   // fixed_income, stocks, emergency_reserve, FII, ETF, crypto, custom
   amount        Decimal  @db.Decimal(14, 2)
+  quantity      Decimal? @db.Decimal(18, 8) // só p/ ativos com ticker - calculado a partir das transações
+  avgPrice      Decimal? @db.Decimal(14, 6) // preço médio - calculado a partir das transações
   yieldRate     Decimal? @db.Decimal(8, 4)
   broker        String?
   ticker        String?
@@ -223,9 +225,35 @@ model Investment {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  familyGroup FamilyGroup?    @relation(fields: [familyGroupId], references: [id], onDelete: Cascade)
-  goal        InvestmentGoal? @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  user         User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyGroup  FamilyGroup?            @relation(fields: [familyGroupId], references: [id], onDelete: Cascade)
+  goal         InvestmentGoal?         @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  transactions InvestmentTransaction[]
+  incomes      InvestmentIncome[]
+}
+
+model InvestmentTransaction {
+  id           String   @id @default(uuid())
+  investmentId String
+  type         String   // BUY, SELL
+  quantity     Decimal  @db.Decimal(18, 8)
+  unitPrice    Decimal  @db.Decimal(14, 6)
+  fees         Decimal  @default(0) @db.Decimal(14, 2)
+  date         DateTime
+  createdAt    DateTime @default(now())
+
+  investment Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+}
+
+model InvestmentIncome {
+  id           String   @id @default(uuid())
+  investmentId String
+  type         String   // DIVIDEND, JCP, RENDIMENTO
+  amount       Decimal  @db.Decimal(14, 2)
+  date         DateTime
+  createdAt    DateTime @default(now())
+
+  investment Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
 }
 
 model FixedBill {
