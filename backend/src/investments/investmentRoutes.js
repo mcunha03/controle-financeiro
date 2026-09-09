@@ -8,6 +8,19 @@ router.use(authMiddleware);
 
 const TX_TYPES = ["BUY", "SELL"];
 const INCOME_TYPES = ["DIVIDEND", "JCP", "RENDIMENTO"];
+const CATEGORIES = ["fixed_income", "stocks", "emergency_reserve", "FII", "ETF", "crypto", "custom"];
+
+// Converte "", undefined, null em `undefined` (Prisma ignora o campo no create/update)
+// e qualquer outro valor em Number. Evita o erro "Expected Decimal, provided String".
+function toDecimalOrUndefined(value) {
+  if (value === "" || value === undefined || value === null) return undefined;
+  const num = Number(value);
+  return Number.isNaN(num) ? undefined : num;
+}
+
+function isEmpty(value) {
+  return value === undefined || value === null || value === "";
+}
 
 // Recalcula quantidade, preço médio e valor aportado (amount) de uma posição a
 // partir do histórico completo de transações (custo médio ponderado). Também
@@ -34,7 +47,6 @@ async function recalculatePosition(investmentId) {
       quantity += txQty;
       avgPrice = quantity > 0 ? totalCost / quantity : 0;
     } else {
-      // Venda: reduz quantidade, preço médio (custo) permanece o mesmo
       quantity = Math.max(0, quantity - txQty);
     }
   }
@@ -75,7 +87,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// GET /investments/:id  (posição detalhada, com transações e proventos)
+// GET /investments/:id
 router.get("/:id", async (req, res) => {
   try {
     const investment = await prisma.investment.findUnique({
@@ -110,6 +122,9 @@ router.post("/", async (req, res) => {
     if (!name || !category) {
       return res.status(400).json({ error: "Nome e categoria são obrigatórios." });
     }
+    if (!CATEGORIES.includes(category)) {
+      return res.status(400).json({ error: "Categoria inválida." });
+    }
 
     const resolvedScope = scope === "FAMILY" ? "FAMILY" : "PERSONAL";
     await assertCanWriteToScope(req, resolvedScope, familyGroupId);
@@ -124,10 +139,10 @@ router.post("/", async (req, res) => {
     // Ativos com ticker (ações, FIIs, ETFs, cripto) têm a posição construída a
     // partir de transações: nasce zerada e só cresce quando você lança compras.
     const hasTicker = Boolean(ticker);
-    if (!hasTicker && amount === undefined) {
+    if (!hasTicker && isEmpty(amount)) {
       return res.status(400).json({ error: "Valor é obrigatório para investimentos sem ticker." });
     }
-    const initialAmount = hasTicker ? 0 : Number(amount) || 0;
+    const initialAmount = hasTicker ? 0 : (toDecimalOrUndefined(amount) ?? 0);
 
     const investment = await prisma.investment.create({
       data: {
@@ -136,9 +151,9 @@ router.post("/", async (req, res) => {
         amount: initialAmount,
         quantity: hasTicker ? 0 : null,
         avgPrice: hasTicker ? 0 : null,
-        yieldRate,
-        broker,
-        ticker,
+        yieldRate: toDecimalOrUndefined(yieldRate),
+        broker: broker || null,
+        ticker: ticker || null,
         goalId: goalId || null,
         scope: resolvedScope,
         userId: req.userId,
@@ -168,19 +183,46 @@ router.put("/:id", async (req, res) => {
 
     const { name, amount, yieldRate, broker, goalId } = req.body;
     const hasTicker = Boolean(existing.ticker);
+    const nextGoalId = goalId === undefined ? existing.goalId : (goalId || null);
 
-    // Para ativos com ticker, quantidade/preço médio/valor aportado vêm sempre
-    // das transações - não são editáveis direto por aqui.
-    const data = { name, yieldRate, broker, goalId: goalId ?? existing.goalId };
+    const data = {
+      name,
+      yieldRate: toDecimalOrUndefined(yieldRate),
+      broker: broker || null,
+      goalId: nextGoalId,
+    };
+
     if (!hasTicker) {
-      if (amount !== undefined && existing.goalId) {
-        const delta = Number(amount) - Number(existing.amount);
+      const nextAmount = isEmpty(amount) ? Number(existing.amount) : Number(amount);
+      data.amount = nextAmount;
+
+      // Estorna da meta antiga (se havia) e credita na meta nova (se houver),
+      // cobrindo tanto mudança de valor quanto troca de meta.
+      if (existing.goalId && existing.goalId !== nextGoalId) {
         await prisma.investmentGoal.update({
           where: { id: existing.goalId },
-          data: { currentAmount: { increment: delta } },
+          data: { currentAmount: { decrement: Number(existing.amount) } },
+        });
+        if (nextGoalId) {
+          await prisma.investmentGoal.update({
+            where: { id: nextGoalId },
+            data: { currentAmount: { increment: nextAmount } },
+          });
+        }
+      } else if (existing.goalId && existing.goalId === nextGoalId) {
+        const delta = nextAmount - Number(existing.amount);
+        if (delta !== 0) {
+          await prisma.investmentGoal.update({
+            where: { id: existing.goalId },
+            data: { currentAmount: { increment: delta } },
+          });
+        }
+      } else if (!existing.goalId && nextGoalId) {
+        await prisma.investmentGoal.update({
+          where: { id: nextGoalId },
+          data: { currentAmount: { increment: nextAmount } },
         });
       }
-      data.amount = amount;
     }
 
     const investment = await prisma.investment.update({
@@ -207,7 +249,6 @@ router.delete("/:id", async (req, res) => {
       });
     }
 
-    // onDelete: Cascade no schema já apaga as transações e proventos junto.
     await prisma.investment.delete({ where: { id: req.params.id } });
     return res.status(204).send();
   } catch (err) {
@@ -218,7 +259,6 @@ router.delete("/:id", async (req, res) => {
 
 // --- Transações (compra/venda) de uma posição ---
 
-// GET /investments/:investmentId/transactions
 router.get("/:investmentId/transactions", async (req, res) => {
   try {
     const investment = await prisma.investment.findUnique({ where: { id: req.params.investmentId } });
@@ -234,7 +274,6 @@ router.get("/:investmentId/transactions", async (req, res) => {
   }
 });
 
-// POST /investments/:investmentId/transactions
 router.post("/:investmentId/transactions", async (req, res) => {
   try {
     const investment = await prisma.investment.findUnique({ where: { id: req.params.investmentId } });
@@ -244,7 +283,7 @@ router.post("/:investmentId/transactions", async (req, res) => {
     if (!TX_TYPES.includes(type)) {
       return res.status(400).json({ error: "Tipo deve ser BUY ou SELL." });
     }
-    if (!quantity || !unitPrice || !date) {
+    if (isEmpty(quantity) || isEmpty(unitPrice) || isEmpty(date)) {
       return res.status(400).json({ error: "Quantidade, preço unitário e data são obrigatórios." });
     }
     if (type === "SELL" && Number(quantity) > Number(investment.quantity || 0)) {
@@ -255,9 +294,9 @@ router.post("/:investmentId/transactions", async (req, res) => {
       data: {
         investmentId: req.params.investmentId,
         type,
-        quantity,
-        unitPrice,
-        fees: fees || 0,
+        quantity: toDecimalOrUndefined(quantity),
+        unitPrice: toDecimalOrUndefined(unitPrice),
+        fees: toDecimalOrUndefined(fees) ?? 0,
         date: new Date(date),
       },
     });
@@ -270,7 +309,6 @@ router.post("/:investmentId/transactions", async (req, res) => {
   }
 });
 
-// PUT /investments/transactions/:id
 router.put("/transactions/:id", async (req, res) => {
   try {
     const tx = await prisma.investmentTransaction.findUnique({ where: { id: req.params.id } });
@@ -285,7 +323,13 @@ router.put("/transactions/:id", async (req, res) => {
 
     await prisma.investmentTransaction.update({
       where: { id: req.params.id },
-      data: { type, quantity, unitPrice, fees, date: date ? new Date(date) : undefined },
+      data: {
+        type,
+        quantity: toDecimalOrUndefined(quantity),
+        unitPrice: toDecimalOrUndefined(unitPrice),
+        fees: toDecimalOrUndefined(fees),
+        date: date ? new Date(date) : undefined,
+      },
     });
 
     const updated = await recalculatePosition(tx.investmentId);
@@ -296,7 +340,6 @@ router.put("/transactions/:id", async (req, res) => {
   }
 });
 
-// DELETE /investments/transactions/:id
 router.delete("/transactions/:id", async (req, res) => {
   try {
     const tx = await prisma.investmentTransaction.findUnique({ where: { id: req.params.id } });
@@ -315,7 +358,6 @@ router.delete("/transactions/:id", async (req, res) => {
 
 // --- Proventos (dividendos/JCP/rendimentos) de uma posição ---
 
-// GET /investments/:investmentId/incomes
 router.get("/:investmentId/incomes", async (req, res) => {
   try {
     const investment = await prisma.investment.findUnique({ where: { id: req.params.investmentId } });
@@ -331,7 +373,6 @@ router.get("/:investmentId/incomes", async (req, res) => {
   }
 });
 
-// POST /investments/:investmentId/incomes
 router.post("/:investmentId/incomes", async (req, res) => {
   try {
     const investment = await prisma.investment.findUnique({ where: { id: req.params.investmentId } });
@@ -341,12 +382,17 @@ router.post("/:investmentId/incomes", async (req, res) => {
     if (!INCOME_TYPES.includes(type)) {
       return res.status(400).json({ error: "Tipo deve ser DIVIDEND, JCP ou RENDIMENTO." });
     }
-    if (!amount || !date) {
+    if (isEmpty(amount) || isEmpty(date)) {
       return res.status(400).json({ error: "Valor e data são obrigatórios." });
     }
 
     const income = await prisma.investmentIncome.create({
-      data: { investmentId: req.params.investmentId, type, amount, date: new Date(date) },
+      data: {
+        investmentId: req.params.investmentId,
+        type,
+        amount: toDecimalOrUndefined(amount),
+        date: new Date(date),
+      },
     });
     return res.status(201).json(income);
   } catch (err) {
@@ -355,7 +401,6 @@ router.post("/:investmentId/incomes", async (req, res) => {
   }
 });
 
-// PUT /investments/incomes/:id
 router.put("/incomes/:id", async (req, res) => {
   try {
     const income = await prisma.investmentIncome.findUnique({ where: { id: req.params.id } });
@@ -370,7 +415,11 @@ router.put("/incomes/:id", async (req, res) => {
 
     const updated = await prisma.investmentIncome.update({
       where: { id: req.params.id },
-      data: { type, amount, date: date ? new Date(date) : undefined },
+      data: {
+        type,
+        amount: toDecimalOrUndefined(amount),
+        date: date ? new Date(date) : undefined,
+      },
     });
     return res.json(updated);
   } catch (err) {
@@ -379,7 +428,6 @@ router.put("/incomes/:id", async (req, res) => {
   }
 });
 
-// DELETE /investments/incomes/:id
 router.delete("/incomes/:id", async (req, res) => {
   try {
     const income = await prisma.investmentIncome.findUnique({ where: { id: req.params.id } });
@@ -397,7 +445,6 @@ router.delete("/incomes/:id", async (req, res) => {
 
 // --- Metas de investimento (sempre pessoais) ---
 
-// GET /investments/goals/list
 router.get("/goals/list", async (req, res) => {
   try {
     const goals = await prisma.investmentGoal.findMany({
@@ -412,14 +459,13 @@ router.get("/goals/list", async (req, res) => {
   }
 });
 
-// POST /investments/goals
 router.post("/goals", async (req, res) => {
   try {
     const { name, targetAmount } = req.body;
-    if (!name || !targetAmount) return res.status(400).json({ error: "Nome e valor alvo são obrigatórios." });
+    if (!name || isEmpty(targetAmount)) return res.status(400).json({ error: "Nome e valor alvo são obrigatórios." });
 
     const goal = await prisma.investmentGoal.create({
-      data: { name, targetAmount, userId: req.userId },
+      data: { name, targetAmount: toDecimalOrUndefined(targetAmount), userId: req.userId },
     });
     return res.status(201).json(goal);
   } catch (err) {
@@ -428,7 +474,6 @@ router.post("/goals", async (req, res) => {
   }
 });
 
-// PUT /investments/goals/:id
 router.put("/goals/:id", async (req, res) => {
   try {
     const existing = await prisma.investmentGoal.findUnique({ where: { id: req.params.id } });
@@ -439,7 +484,7 @@ router.put("/goals/:id", async (req, res) => {
     const { name, targetAmount } = req.body;
     const goal = await prisma.investmentGoal.update({
       where: { id: req.params.id },
-      data: { name, targetAmount },
+      data: { name, targetAmount: toDecimalOrUndefined(targetAmount) },
     });
     return res.json(goal);
   } catch (err) {
@@ -448,7 +493,6 @@ router.put("/goals/:id", async (req, res) => {
   }
 });
 
-// DELETE /investments/goals/:id
 router.delete("/goals/:id", async (req, res) => {
   try {
     const existing = await prisma.investmentGoal.findUnique({ where: { id: req.params.id } });

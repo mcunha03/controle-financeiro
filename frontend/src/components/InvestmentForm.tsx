@@ -1,3 +1,4 @@
+// src/components/InvestmentForm.tsx
 import { useState, type FormEvent } from "react";
 import { Input } from "./Input";
 import { Select } from "./Select";
@@ -36,12 +37,14 @@ export function InvestmentForm({
   const [ticker, setTicker] = useState(initial?.ticker || "");
   const [goalId, setGoalId] = useState(initial?.goalId || "");
 
+  const hasTicker = Boolean(ticker.trim());
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     onSubmit({
       name,
       category,
-      amount: parseFloat(amount) || 0,
+      amount: amount ? parseFloat(amount) : 0,
       yieldRate: yieldRate ? parseFloat(yieldRate) : undefined,
       broker: broker || undefined,
       ticker: ticker || undefined,
@@ -51,7 +54,8 @@ export function InvestmentForm({
 
   return (
     <form onSubmit={handleSubmit} className="stack-form">
-      <Input label="Nome" placeholder="Ex.: Tesouro Selic 2029" value={name} onChange={(e) => setName(e.target.value)} required />
+      <Input label="Nome" placeholder="Ex.: Tesouro Selic 2029 ou Petrobras" value={name} onChange={(e) => setName(e.target.value)} required />
+      
       <Select label="Categoria" value={category} onChange={(e) => setCategory(e.target.value)}>
         {Object.entries(INVESTMENT_CATEGORY_LABELS).map(([value, label]) => (
           <option key={value} value={value}>
@@ -59,8 +63,27 @@ export function InvestmentForm({
           </option>
         ))}
       </Select>
+
       <div className="field-row">
-        <Input label="Valor aplicado" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+        <Input label="Código/Ticker (opcional)" placeholder="Ex: PETR4, HGLG11" value={ticker} onChange={(e) => setTicker(e.target.value)} />
+        <Input
+          label="Corretora/Banco (opcional)"
+          value={broker}
+          onChange={(e) => setBroker(e.target.value)}
+        />
+      </div>
+
+      <div className="field-row">
+        {!hasTicker && (
+          <Input 
+            label="Valor aplicado" 
+            type="number" 
+            step="0.01" 
+            value={amount} 
+            onChange={(e) => setAmount(e.target.value)} 
+            required={!hasTicker} 
+          />
+        )}
         <Input
           label="Rendimento (% a.a., opcional)"
           type="number"
@@ -69,10 +92,7 @@ export function InvestmentForm({
           onChange={(e) => setYieldRate(e.target.value)}
         />
       </div>
-      <div className="field-row">
-        <Input label="Corretora/Banco (opcional)" value={broker} onChange={(e) => setBroker(e.target.value)} />
-        <Input label="Código/Ticker (opcional)" value={ticker} onChange={(e) => setTicker(e.target.value)} />
-      </div>
+
       {goals.length > 0 && (
         <Select label="Meta vinculada (opcional)" value={goalId} onChange={(e) => setGoalId(e.target.value)}>
           <option value="">Nenhuma</option>
@@ -83,6 +103,7 @@ export function InvestmentForm({
           ))}
         </Select>
       )}
+
       <div className="modal-actions">
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancelar

@@ -1,3 +1,4 @@
+// src/services/investmentService.ts
 import api from "./api";
 import type { Investment, InvestmentGoal, InvestmentTransaction, InvestmentIncome } from "../types";
 import { scopeQuery, type ScopeParams } from "./scopeParams";
@@ -11,7 +12,7 @@ export const investmentService = {
   async create(payload: {
     name: string;
     category: string;
-    amount: number;
+    amount?: number; // Agora opcional, pois ativos com ticker nascem com 0
     yieldRate?: number;
     broker?: string;
     ticker?: string;
@@ -26,7 +27,7 @@ export const investmentService = {
     return data;
   },
 
-  async update(id: string, payload: Partial<Pick<Investment, "name" | "amount" | "yieldRate" | "broker" | "ticker">>) {
+  async update(id: string, payload: Partial<Pick<Investment, "name" | "amount" | "yieldRate" | "broker" | "goalId">>) {
     const { data } = await api.put<Investment>(`/investments/${id}`, payload);
     return data;
   },
@@ -35,7 +36,7 @@ export const investmentService = {
     await api.delete(`/investments/${id}`);
   },
 
-    async get(id: string) {
+  async get(id: string) {
     const { data } = await api.get<Investment>(`/investments/${id}`);
     return data;
   },
@@ -62,7 +63,8 @@ export const investmentService = {
   },
 
   async removeTransaction(id: string) {
-    await api.delete(`/investments/transactions/${id}`);
+    const { data } = await api.delete<Investment>(`/investments/transactions/${id}`);
+    return data;
   },
 
   async listIncomes(investmentId: string) {
