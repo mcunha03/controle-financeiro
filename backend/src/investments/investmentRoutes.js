@@ -118,7 +118,8 @@ router.get("/:id", async (req, res) => {
 // POST /investments
 router.post("/", async (req, res) => {
   try {
-    const { name, category, amount, yieldRate, broker, ticker, goalId, scope, familyGroupId } = req.body;
+    const { name, category, amount, quantity, unitPrice, yieldRate, broker, ticker, goalId, scope, familyGroupId } = req.body;
+
     if (!name || !category) {
       return res.status(400).json({ error: "Nome e categoria são obrigatórios." });
     }
@@ -136,12 +137,15 @@ router.post("/", async (req, res) => {
       }
     }
 
-    // Ativos com ticker (ações, FIIs, ETFs, cripto) têm a posição construída a
-    // partir de transações: nasce zerada e só cresce quando você lança compras.
     const hasTicker = Boolean(ticker);
+
     if (!hasTicker && isEmpty(amount)) {
       return res.status(400).json({ error: "Valor é obrigatório para investimentos sem ticker." });
     }
+    if (hasTicker && (isEmpty(quantity) || isEmpty(unitPrice))) {
+      return res.status(400).json({ error: "Quantidade e preço de compra são obrigatórios para ativos com ticker." });
+    }
+
     const initialAmount = hasTicker ? 0 : (toDecimalOrUndefined(amount) ?? 0);
 
     const investment = await prisma.investment.create({
@@ -161,14 +165,30 @@ router.post("/", async (req, res) => {
       },
     });
 
-    if (!hasTicker && goalId && initialAmount) {
+    let result = investment;
+
+    if (hasTicker) {
+      // Lança a compra inicial como transação, mantendo consistência com o
+      // histórico que recalculatePosition usa para recalcular a posição.
+      await prisma.investmentTransaction.create({
+        data: {
+          investmentId: investment.id,
+          type: "BUY",
+          quantity: toDecimalOrUndefined(quantity),
+          unitPrice: toDecimalOrUndefined(unitPrice),
+          fees: 0,
+          date: new Date(),
+        },
+      });
+      result = await recalculatePosition(investment.id);
+    } else if (goalId && initialAmount) {
       await prisma.investmentGoal.update({
         where: { id: goalId },
         data: { currentAmount: { increment: initialAmount } },
       });
     }
 
-    return res.status(201).json(investment);
+    return res.status(201).json(result);
   } catch (err) {
     console.error(err);
     return res.status(err.status || 500).json({ error: err.message || "Erro ao criar investimento." });

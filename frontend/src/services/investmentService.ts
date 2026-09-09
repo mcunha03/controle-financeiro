@@ -9,23 +9,25 @@ export const investmentService = {
     return data;
   },
 
-  async create(payload: {
-    name: string;
-    category: string;
-    amount?: number; // Agora opcional, pois ativos com ticker nascem com 0
-    yieldRate?: number;
-    broker?: string;
-    ticker?: string;
-    goalId?: string;
-    scope: ScopeParams;
-  }) {
-    const { data } = await api.post<Investment>("/investments", {
-      ...payload,
-      scope: payload.scope.scope,
-      familyGroupId: payload.scope.familyGroupId,
-    });
-    return data;
-  },
+async create(payload: {
+  name: string;
+  category: string;
+  amount?: number;
+  quantity?: number;
+  unitPrice?: number;
+  yieldRate?: number;
+  broker?: string;
+  ticker?: string;
+  goalId?: string;
+  scope: ScopeParams;
+}) {
+  const { data } = await api.post<Investment>("/investments", {
+    ...payload,
+    scope: payload.scope.scope,
+    familyGroupId: payload.scope.familyGroupId,
+  });
+  return data;
+},
 
   async update(id: string, payload: Partial<Pick<Investment, "name" | "amount" | "yieldRate" | "broker" | "goalId">>) {
     const { data } = await api.put<Investment>(`/investments/${id}`, payload);
