@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Target } from "lucide-react";
+import { Plus, Trash2, Target, Eye } from "lucide-react";
 import { useScope } from "../contexts/ScopeContext";
 import { investmentService } from "../services/investmentService";
 import type { Investment, InvestmentGoal } from "../types";
@@ -10,6 +10,7 @@ import { EmptyState } from "../components/EmptyState";
 import { Loading } from "../components/Loading";
 import { InvestmentForm, type InvestmentFormValues } from "../components/InvestmentForm";
 import { GoalForm, type GoalFormValues } from "../components/GoalForm";
+import { InvestmentDetail } from "../components/InvestmentDetail";
 import { formatCurrency, INVESTMENT_CATEGORY_LABELS } from "../utils/format";
 import { getErrorMessage } from "../services/api";
 
@@ -21,6 +22,7 @@ export function Investments() {
   const [modalOpen, setModalOpen] = useState(false);
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [deleting, setDeleting] = useState<Investment | null>(null);
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -129,16 +131,25 @@ export function Investments() {
                   <div className="movement-row-main">
                     <span className="category-dot" style={{ background: "var(--accent)" }} aria-hidden="true" />
                     <div>
-                      <span className="movement-row-desc">{inv.name}</span>
+                      <span className="movement-row-desc">
+                        {inv.name}
+                        {inv.ticker ? ` (${inv.ticker})` : ""}
+                      </span>
                       <span className="movement-row-meta">
                         {INVESTMENT_CATEGORY_LABELS[inv.category] || inv.category}
                         {inv.broker ? ` · ${inv.broker}` : ""}
+                        {inv.ticker ? ` · ${Number(inv.quantity || 0)} un. · PM ${formatCurrency(inv.avgPrice)}` : ""}
                         {inv.yieldRate ? ` · ${Number(inv.yieldRate)}% a.a.` : ""}
                         {inv.goal ? ` · meta: ${inv.goal.name}` : ""}
                       </span>
                     </div>
                   </div>
                   <span>{formatCurrency(inv.amount)}</span>
+                  {inv.ticker && (
+                    <button type="button" className="icon-btn-muted" onClick={() => setViewingId(inv.id)} aria-label="Ver posição">
+                      <Eye size={15} />
+                    </button>
+                  )}
                   <button type="button" className="icon-btn-muted" onClick={() => setDeleting(inv)} aria-label="Excluir investimento">
                     <Trash2 size={15} />
                   </button>
@@ -156,6 +167,10 @@ export function Investments() {
 
       <Modal open={goalModalOpen} title="Nova meta de investimento" onClose={() => setGoalModalOpen(false)}>
         <GoalForm submitting={submitting} onSubmit={handleCreateGoal} onCancel={() => setGoalModalOpen(false)} />
+      </Modal>
+
+      <Modal open={!!viewingId} title="Posição do investimento" onClose={() => setViewingId(null)}>
+        {viewingId && <InvestmentDetail investmentId={viewingId} onClose={() => setViewingId(null)} onChanged={load} />}
       </Modal>
 
       <ConfirmDialog
