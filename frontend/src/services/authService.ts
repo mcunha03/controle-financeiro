@@ -32,6 +32,11 @@ export const authService = {
     return data;
   },
 
+  async markTutorialSeen(tutorialId: string) {
+    const { data } = await api.put<{ seenTutorials: string[] }>("/auth/tutorials", { tutorialId });
+    return data;
+ },
+
   async createFamilyGroup(name: string) {
     const { data } = await api.post<FamilyGroup>("/auth/family/create", { name });
     return data;

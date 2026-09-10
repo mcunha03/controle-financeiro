@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Wallet,
@@ -9,11 +9,15 @@ import {
   Settings,
   LogOut,
   Menu,
+  HelpCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Joyride, STATUS, type EventData } from "react-joyride";
 import { useAuth } from "../contexts/AuthContext";
 import { ScopeSwitch } from "./ScopeSwitch";
 import { GlobalSearch } from "./GlobalSearch";
+import { useTutorial } from "../contexts/TutorialContext";
+import { ROUTE_TOURS } from "../tutorials/tours";
 
 const NAV_ITEMS = [
   { to: "/", label: "Painel", icon: LayoutDashboard, end: true },
@@ -28,6 +32,17 @@ const NAV_ITEMS = [
 export function Layout() {
   const { user, logout } = useAuth();
   const [navOpen, setNavOpen] = useState(false);
+  const location = useLocation();
+  const { activeTour, startTour, markTourSeen, hasSeenTour } = useTutorial();
+
+  const routeTour = ROUTE_TOURS[location.pathname];
+
+  useEffect(() => {
+    if (routeTour && !hasSeenTour(routeTour.id)) {
+      startTour(routeTour.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   return (
     <div className="app-shell">
@@ -64,12 +79,38 @@ export function Layout() {
           <ScopeSwitch />
           <div className="topbar-spacer" />
           <GlobalSearch />
+          {routeTour && (
+            <button
+              type="button"
+              className="topbar-help-btn"
+              onClick={() => startTour(routeTour.id)}
+              aria-label="Rever tutorial"
+              title="Rever tutorial"
+            >
+              <HelpCircle size={18} />
+            </button>
+          )}
           <span className="topbar-user">Olá, {user?.name?.split(" ")[0]}</span>
         </header>
+
         <main className="app-content">
           <Outlet />
         </main>
       </div>
+
+      {routeTour && (
+        <Joyride
+          steps={routeTour.steps}
+          run={activeTour === routeTour.id}
+          options={{ buttons: ["back", "close", "primary", "skip"] }}
+          locale={{ back: "Voltar", close: "Fechar", last: "Concluir", next: "Próximo", skip: "Pular" }}
+          onEvent={(data: EventData) => {
+            if (data.status === STATUS.FINISHED || data.status === STATUS.SKIPPED) {
+              markTourSeen(routeTour.id);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

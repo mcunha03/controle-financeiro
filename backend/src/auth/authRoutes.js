@@ -105,6 +105,7 @@ router.get("/me", authMiddleware, async (req, res) => {
         name: true,
         email: true,
         createdAt: true,
+        seenTutorials: true,
         memberships: {
           include: { familyGroup: true },
         },
@@ -158,6 +159,25 @@ router.put("/change-password", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Erro ao alterar senha." });
+  }
+});
+
+// PUT /auth/tutorials - marca um tutorial como visto pelo usuário logado
+router.put("/tutorials", authMiddleware, async (req, res) => {
+  try {
+    const { tutorialId } = req.body;
+    if (!tutorialId) {
+      return res.status(400).json({ error: "tutorialId é obrigatório." });
+    }
+    const user = await prisma.user.update({
+      where: { id: req.userId },
+      data: { seenTutorials: { push: tutorialId } },
+      select: { seenTutorials: true },
+    });
+    return res.json(user);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erro ao salvar tutorial visto." });
   }
 });
 
