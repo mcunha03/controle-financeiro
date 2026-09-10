@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ScopeProvider } from "./contexts/ScopeContext";
+import { TutorialProvider } from "./contexts/TutorialContext";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
 import { Layout } from "./components/Layout";
 import { Login } from "./pages/Login";
@@ -26,41 +27,43 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <ScopeProvider>
-          <Routes>
-            <Route
-              path="/login"
-              element={
-                <PublicOnlyRoute>
-                  <Login />
-                </PublicOnlyRoute>
-              }
-            />
-            <Route
-              path="/registro"
-              element={
-                <PublicOnlyRoute>
-                  <Register />
-                </PublicOnlyRoute>
-              }
-            />
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <Layout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<Dashboard />} />
-              <Route path="carteiras" element={<Wallets />} />
-              <Route path="movimentacoes" element={<Movements />} />
-              <Route path="cartoes" element={<Cards />} />
-              <Route path="investimentos" element={<Investments />} />
-              <Route path="relatorios" element={<Reports />} />
-              <Route path="configuracoes" element={<Settings />} />
-            </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <TutorialProvider>
+            <Routes>
+              <Route
+                path="/login"
+                element={
+                  <PublicOnlyRoute>
+                    <Login />
+                  </PublicOnlyRoute>
+                }
+              />
+              <Route
+                path="/registro"
+                element={
+                  <PublicOnlyRoute>
+                    <Register />
+                  </PublicOnlyRoute>
+                }
+              />
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <Layout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<Dashboard />} />
+                <Route path="carteiras" element={<Wallets />} />
+                <Route path="movimentacoes" element={<Movements />} />
+                <Route path="cartoes" element={<Cards />} />
+                <Route path="investimentos" element={<Investments />} />
+                <Route path="relatorios" element={<Reports />} />
+                <Route path="configuracoes" element={<Settings />} />
+              </Route>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </TutorialProvider>
         </ScopeProvider>
       </AuthProvider>
     </BrowserRouter>
