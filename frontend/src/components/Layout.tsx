@@ -102,7 +102,8 @@ export function Layout() {
         <Joyride
           steps={routeTour.steps}
           run={activeTour === routeTour.id}
-          options={{ buttons: ["back", "close", "primary", "skip"] }}
+          continuous
+          options={{ buttons: ["back", "primary", "skip"] }}
           locale={{ back: "Voltar", close: "Fechar", last: "Concluir", next: "Próximo", skip: "Pular" }}
           onEvent={(data: EventData) => {
             if (data.status === STATUS.FINISHED || data.status === STATUS.SKIPPED) {
